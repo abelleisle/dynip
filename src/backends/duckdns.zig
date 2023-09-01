@@ -1,49 +1,67 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const NetType = @import("../types.zig");
+const String = NetType.String;
+const StringManaged = NetType.StringManaged;
 
 // This is a DNS backend service
 const DuckDNS = @This();
 
-pub fn build_request(
-    domains: NetType.DomainList,
+pub fn request_url(
+    allocator: Allocator,
+    domains: NetType.String,
     token: NetType.String,
-    ip4: ?NetType.Address,
-    ip6: ?NetType.Address,
-) NetType.DNSError!NetType.String {
-    _ = token;
-    _ = domains;
+    ip4: ?NetType.String,
+    ip6: ?NetType.String,
+) !NetType.String {
     if ((ip4 == null) and (ip6 == null)) {
         return NetType.DNSError.MissingArgument;
     }
 
-    // var ip4_out = try NetType.StringManaged().initCapacity(256);
-    // var ip6_out = try NetType.StringManaged().initCapacity(256);
-    //
-    // ip4.?.format("{s}", null, ip4_out.slice());
-    // ip6.?.format("{s}", null, ip6_out.slice());
-    //
-    // var url = NetType.StringManaged().init();
-    //
-    // url.fmt("https://www.duckdns.org/update?domains={s}&token={s}&ip={s}&ipv6={s}",
-    //         .{domains.get(0), token, ip4_out.slice(), ip6_out.slice()});
+    // Temporary string
+    var tmp = StringManaged.init(allocator);
+    defer tmp.deinit();
 
-    // return url.slice();
+    // Base URL
+    var url = try StringManaged.initData(allocator, "https://duckdns.org/update?");
+    defer url.deinit();
 
-    // return "https://www.duckdns.org/update?domains={YOURVALUE}&token={YOURVALUE}[&ip={YOURVALUE}][&ipv6={YOURVALUE}][&verbose=true][&clear=true]"
+    try url.fmt("https://duckdns.org/update?domains={s}&token={s}", .{ domains, token });
 
-    const url = "https://duckdns.org";
-    return url;
+    if (ip4) |ip4_s| {
+        try tmp.fmt("&ip={s}", .{ip4_s});
+        try url.append(tmp.str());
+    }
+
+    if (ip6) |ip6_s| {
+        try tmp.fmt("&ipv6={s}", .{ip6_s});
+        try url.append(tmp.str());
+    }
+
+    return try url.toOwned() orelse error.NoUrl;
 }
 
-const exampleURL = "example.com";
-
 test "default url builder" {
-    var url_list = try NetType.DomainList.init(1);
-    url_list.set(0, exampleURL);
+    const alloc = std.testing.allocator;
 
+    const domain = "example";
     const token = "123456789!";
 
-    const url = build_request(url_list, token, null, null);
+    if (request_url(alloc, domain, token, null, null)) |_| {
+        @panic("Unexpected");
+    } else |err| switch (err) {
+        NetType.DNSError.MissingArgument => {},
+        else => @panic("Unexpected"),
+    }
+}
 
-    try std.testing.expectError(NetType.DNSError.MissingArgument, url);
+test "url test" {
+    const alloc = std.testing.allocator;
+
+    const url = try request_url(alloc, "example", "123456789abcdef", "192.168.1.1", "::1:2:3:4");
+    defer alloc.free(url);
+
+    const test_url = "https://duckdns.org/update?domains=example&token=123456789abcdef&ip=192.168.1.1&ipv6=::1:2:3:4";
+
+    try std.testing.expectEqualStrings(test_url, url);
 }

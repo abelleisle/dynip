@@ -21,5 +21,6 @@ pub fn URLBuilder() type {
                 self.allocator.free(buf);
             }
         }
+        
     };
 }

@@ -1,6 +1,6 @@
 const std = @import("std");
-const backends = @import("backends.zig");
 const service = @import("service.zig");
+const NetType = @import("types.zig");
 
 pub fn main() !void {
     // // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
@@ -16,16 +16,14 @@ pub fn main() !void {
     // try stdout.print("Run `zig build test` to run the tests.\n", .{});
     //
     // try bw.flush(); // don't forget to flush!
+
+    const test_ip = try NetType.Address.resolveIp("172.16.50.100", 100);
+
+    std.debug.print("IP address to print: {}\n", .{test_ip});
 }
 
 test "test all" {
-    // const test_backend = @import("backends.zig");
     @import("std").testing.refAllDecls(@This());
-    // @import("std").testing.refAllDecls(test_backend);
-}
-
-test "test backend creation" {
-    const duckdns = try service.init(backends.backends.DuckDNS);
-
-    std.log.debug("Token: {s}", .{duckdns.password});
+    @import("std").testing.refAllDecls(service);
+    @import("std").testing.refAllDecls(NetType);
 }

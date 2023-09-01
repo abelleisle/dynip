@@ -1,9 +1,22 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
 // runner.
 pub fn build(b: *std.Build) void {
+    // zig fmt: off
+    const curl = b.createModule(.{
+        .source_file = .{ .path = "./lib/zig-curl/src/main.zig" },
+        // .dependencies = &.{
+        //     .{ .name = "core", .module = core.module(b) },
+        //     .{ .name = "ecs", .module = ecs.module(b) },
+        //     .{ .name = "sysaudio", .module = sysaudio.module(b) },
+        // },
+    });
+    // zig fmt: on
+
+    // b.createModule(Creat)
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
     // means any target is allowed, and the default is native. Other options
@@ -23,6 +36,9 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+
+    linkToCurl(exe);
+    exe.addModule("curl", curl);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
@@ -67,4 +83,18 @@ pub fn build(b: *std.Build) void {
     // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
+}
+
+fn linkToCurl(step: *std.build.LibExeObjStep) void {
+    var libs = if (builtin.os.tag == .windows) [_][]const u8{ "c", "curl", "bcrypt", "crypto", "crypt32", "ws2_32", "wldap32", "ssl", "psl", "iconv", "idn2", "unistring", "z", "zstd", "nghttp2", "ssh2", "brotlienc", "brotlidec", "brotlicommon" } else [_][]const u8{ "c", "curl" };
+    for (libs) |i| {
+        step.linkSystemLibrary(i);
+    }
+    if (builtin.os.tag == .linux) {
+        step.linkSystemLibraryNeeded("libcurl");
+    }
+    if (builtin.os.tag == .windows) {
+        step.include_dirs.append(.{ .raw_path = "c:/msys64/mingw64/include" }) catch unreachable;
+        step.lib_paths.append("c:/msys64/mingw64/lib") catch unreachable;
+    }
 }

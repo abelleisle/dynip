@@ -1,46 +1,80 @@
 const Service = @This();
-const Backends = @import("backends.zig");
 const NetType = @import("types.zig");
 
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
-address4 : ?NetType.Address,
-address6 : ?NetType.Address,
-username : NetType.String,
-password : NetType.String,
-backend : Backends.backends,
-domains : NetType.DomainList,
+const b_duckdns = @import("backends/duckdns.zig");
+const b_namecheap = @import("backends/namecheap.zig");
 
-pub fn init(backend: Backends.backends) !Service {
-    const init_add4 = try NetType.Address.parseIp4("127.0.0.1", 0);
-    const init_add6 = try NetType.Address.parseIp6("::1", 0);
+const Backends = union(enum) {
+    duckdns,
+    namecheap,
+};
 
-    return .{
-        .address4 = init_add4,
-        .address6 = init_add6,
-        .username = "",
-        .password = "",
-        .backend = backend,
-        .domains = try NetType.DomainList.init(1) // TODO: make this dynamic
-    };
+const Options = struct {
+    address4: ?NetType.String = null,
+    address6: ?NetType.String = null,
+    username: NetType.String = "",
+    password: NetType.String = "",
+    domain: NetType.String,
+};
+
+/// Struct Methods
+allocator: Allocator,
+backend: Backends,
+options: Options,
+url: []const u8,
+
+pub fn init(allocator: Allocator, backend: Backends, options: Options) !Service {
+    var self: Service = .{ .allocator = allocator, .backend = backend, .options = options, .url = "" };
+    self.url = try self.get_url();
+    return self;
 }
 
-fn get_url(self: *const Service) !NetType.String {
+pub fn deinit(self: *Service) void {
+    self.allocator.free(self.url);
+}
+
+fn get_url(self: *Service) ![]const u8 {
+    const o = self.options;
+    // zig fmt: off
     return switch (self.backend) {
-        .DuckDNS => try Backends.DuckDNS.build_request(
-                        self.domains,
-                        self.password,
-                        self.address4,
-                        self.address6,
-                    ),
-        else => NetType.DNSError.InvalidBackend
+        .duckdns => try b_duckdns.request_url(
+            self.allocator,
+            o.domain,
+            o.password,
+            o.address4,
+            o.address6
+        ),
+        .namecheap => try b_namecheap.request_url(
+            self.allocator,
+            o.domain,
+            o.password,
+            o.address4,
+            o.address6
+        ),
     };
+    // zig fmt: on
 }
 
 test "DuckDNS url" {
-    const ddns = try Service.init(Backends.backends.DuckDNS);
+    const alloc = std.testing.allocator;
 
-    const url = try ddns.get_url();
+    // zig fmt: off
+    const options = .{
+        .password = "1234",
+        .domain   = "example",
+        .address6 = "::1:2:3:4"
+    };
+    // zig fmt: on
 
-    try std.testing.expectEqualStrings("https://duckdns.org", url);
+    var dns = try Service.init(alloc, .duckdns, options);
+    defer dns.deinit();
+
+    const url = dns.url;
+
+    const expected = "https://duckdns.org/update?domains=example&token=1234&ipv6=::1:2:3:4";
+    try std.testing.expectEqualStrings(expected, url);
+    try std.testing.expectEqual(@as(usize, 68), url.len);
 }
