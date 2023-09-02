@@ -5,17 +5,6 @@ const builtin = @import("builtin");
 // declaratively construct a build graph that will be executed by an external
 // runner.
 pub fn build(b: *std.Build) void {
-    // zig fmt: off
-    const curl = b.createModule(.{
-        .source_file = .{ .path = "./lib/zig-curl/src/main.zig" },
-        // .dependencies = &.{
-        //     .{ .name = "core", .module = core.module(b) },
-        //     .{ .name = "ecs", .module = ecs.module(b) },
-        //     .{ .name = "sysaudio", .module = sysaudio.module(b) },
-        // },
-    });
-    // zig fmt: on
-
     // b.createModule(Creat)
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
@@ -37,8 +26,14 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // const curl = b.dependency("curl", .{
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    // const curlModule = curl.module("curl");
+    const curlModule = b.createModule(.{ .source_file = .{ .path = "./lib/zig-curl/src/main.zig" } });
+    exe.addModule("curl", curlModule);
     linkToCurl(exe);
-    exe.addModule("curl", curl);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
@@ -75,6 +70,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    unit_tests.addModule("curl", curlModule);
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
 
@@ -85,7 +81,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_unit_tests.step);
 }
 
-fn linkToCurl(step: *std.build.LibExeObjStep) void {
+fn linkToCurl(step: *std.build.CompileStep) void {
     var libs = if (builtin.os.tag == .windows) [_][]const u8{ "c", "curl", "bcrypt", "crypto", "crypt32", "ws2_32", "wldap32", "ssl", "psl", "iconv", "idn2", "unistring", "z", "zstd", "nghttp2", "ssh2", "brotlienc", "brotlidec", "brotlicommon" } else [_][]const u8{ "c", "curl" };
     for (libs) |i| {
         step.linkSystemLibrary(i);

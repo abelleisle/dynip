@@ -2,6 +2,8 @@ const std = @import("std");
 const service = @import("service.zig");
 const NetType = @import("types.zig");
 
+const curl = @import("curl");
+
 pub fn main() !void {
     // // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     // std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
@@ -26,4 +28,28 @@ test "test all" {
     @import("std").testing.refAllDecls(@This());
     @import("std").testing.refAllDecls(service);
     @import("std").testing.refAllDecls(NetType);
+}
+
+test "curl" {
+    const alloc = std.testing.allocator;
+
+    const f = struct {
+        fn f(data: []const u8) anyerror!usize {
+            try std.io.getStdOut().writeAll(data);
+            return data.len;
+        }
+    }.f;
+
+    const req = curl.request{
+        .allocator = alloc,
+        .cb = f,
+        .sslVerify = true,
+    };
+
+    var res = try curl.get("https://google.com/", req);
+    if (res != 0) {
+        var msg = try curl.strerrorAlloc(alloc, res);
+        defer alloc.free(msg);
+        std.log.warn("{s}", .{msg});
+    }
 }
