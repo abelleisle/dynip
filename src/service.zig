@@ -22,12 +22,21 @@ const Options = struct {
 
 /// Struct Methods
 allocator: Allocator,
+name: []const u8,
 backend: Backends,
 options: Options,
 url: []const u8,
 
-pub fn init(allocator: Allocator, backend: Backends, options: Options) !Service {
-    var self: Service = .{ .allocator = allocator, .backend = backend, .options = options, .url = "" };
+pub fn init(allocator: Allocator, name: []const u8, backend: Backends, options: Options) !Service {
+    // zig fmt: off
+    var self: Service = .{
+        .allocator = allocator,
+        .name      = name,
+        .backend   = backend,
+        .options   = options,
+        .url       = ""
+    };
+    // zig fmt: on
     self.url = try self.get_url();
     return self;
 }
@@ -69,7 +78,7 @@ test "DuckDNS url" {
     };
     // zig fmt: on
 
-    var dns = try Service.init(alloc, .duckdns, options);
+    var dns = try Service.init(alloc, "tester", .duckdns, options);
     defer dns.deinit();
 
     const url = dns.url;

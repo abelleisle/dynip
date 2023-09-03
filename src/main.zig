@@ -1,55 +1,62 @@
 const std = @import("std");
 const service = @import("service.zig");
 const NetType = @import("types.zig");
+const Config = @import("config.zig");
+const Ini = @import("ini.zig");
 
-const curl = @import("curl");
+const Allocator = std.mem.Allocator;
 
-pub fn main() !void {
-    // // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    // std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-    //
-    // // stdout is for the actual output of your application, for example if you
-    // // are implementing gzip, then only the compressed bytes should be sent to
-    // // stdout, not any debugging messages.
-    // const stdout_file = std.io.getStdOut().writer();
-    // var bw = std.io.bufferedWriter(stdout_file);
-    // const stdout = bw.writer();
-    //
-    // try stdout.print("Run `zig build test` to run the tests.\n", .{});
-    //
-    // try bw.flush(); // don't forget to flush!
+const curl = @import("curl/curl.zig");
 
-    const test_ip = try NetType.Address.resolveIp("172.16.50.100", 100);
+pub fn main() void {
+    const test_ip = NetType.Address.resolveIp("172.16.50.100", 100) catch |err| {
+        std.log.err("Error while resolving IP: {}", .{err});
+        return;
+    };
 
     std.debug.print("IP address to print: {}\n", .{test_ip});
+
+    curl_test() catch |err| {
+        std.log.err("Error while testing curl: {}", .{err});
+        return;
+    };
+
+    const dir = Config.getPath();
+
+    std.log.debug("Config Dir: {s}", .{dir});
+}
+
+fn curl_test() !void {
+    const allocator = std.heap.page_allocator;
+    const response = curl.get(allocator, "https://example.com/") catch {
+        return curl.curlError.Error;
+    };
+
+    if (response) |res| {
+        defer allocator.free(res);
+
+        std.log.debug("Response: {s}", .{res});
+    }
 }
 
 test "test all" {
     @import("std").testing.refAllDecls(@This());
     @import("std").testing.refAllDecls(service);
     @import("std").testing.refAllDecls(NetType);
+    @import("std").testing.refAllDecls(Config);
+    @import("std").testing.refAllDecls(Ini);
 }
 
-test "curl" {
-    const alloc = std.testing.allocator;
-
-    const f = struct {
-        fn f(data: []const u8) anyerror!usize {
-            try std.io.getStdOut().writeAll(data);
-            return data.len;
-        }
-    }.f;
-
-    const req = curl.request{
-        .allocator = alloc,
-        .cb = f,
-        .sslVerify = true,
+test "curl simple test" {
+    const allocator = std.testing.allocator;
+    const response = curl.get(allocator, "https://example.com/") catch {
+        return curl.curlError.Error;
     };
 
-    var res = try curl.get("https://google.com/", req);
-    if (res != 0) {
-        var msg = try curl.strerrorAlloc(alloc, res);
-        defer alloc.free(msg);
-        std.log.warn("{s}", .{msg});
+    if (response) |res| {
+        defer allocator.free(res);
+
+        const index = std.mem.indexOf(u8, res, "<h1>Example Domain</h1>");
+        try std.testing.expect(index != null);
     }
 }

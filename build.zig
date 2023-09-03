@@ -5,7 +5,35 @@ const builtin = @import("builtin");
 // declaratively construct a build graph that will be executed by an external
 // runner.
 pub fn build(b: *std.Build) void {
-    // b.createModule(Creat)
+    // Build allocator
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const alloc = arena.allocator();
+
+    // Getting nix build inputs
+    const env_build_inputs = std.os.getenv("buildInputs");
+    const build_inputs = env_build_inputs orelse "";
+    if (env_build_inputs) |bi| {
+        std.log.info("Build Inputs: {s}", .{bi});
+    } else {
+        std.log.warn("Cannot find the `buildInputs` environment variable", .{});
+    }
+
+    // Split nix build inputs into packages
+    var sys_packages = std.ArrayList([]const u8).init(alloc);
+    var it = std.mem.split(u8, build_inputs, " ");
+    while (it.next()) |p| {
+        const path = std.fmt.allocPrint(alloc, "{s}/include/", .{p}) catch {
+            std.log.err("Unable to obtain packages include path: {s}", .{p});
+            return;
+        };
+        if (sys_packages.append(path)) {
+            std.log.info("nix Package: {s}", .{path});
+        } else |_| {
+            std.log.warn("Unable to append package: {s} to variable", .{path});
+        }
+    }
+
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
     // means any target is allowed, and the default is native. Other options
@@ -34,6 +62,11 @@ pub fn build(b: *std.Build) void {
     const curlModule = b.createModule(.{ .source_file = .{ .path = "./lib/zig-curl/src/main.zig" } });
     exe.addModule("curl", curlModule);
     linkToCurl(exe);
+
+    for (sys_packages.items) |p| {
+        exe.addIncludePath(.{ .path = p });
+    }
+    exe.linkLibC();
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
@@ -71,6 +104,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     unit_tests.addModule("curl", curlModule);
+    for (sys_packages.items) |p| {
+        unit_tests.addIncludePath(.{ .path = p });
+    }
+    linkToCurl(unit_tests);
+    unit_tests.linkLibC();
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
 

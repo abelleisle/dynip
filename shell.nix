@@ -4,7 +4,8 @@ pkgs.mkShell {
 
   # buildInputs is used for building the package, not for dev
   buildInputs = with pkgs; [
-    curl
+    curl.dev
+    glibc
     zig
   ];
 
