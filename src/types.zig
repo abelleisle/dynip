@@ -1,6 +1,65 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+// zig fmt: off
+pub const Ip4 = struct {
+    add: std.net.Ip4Address,
+    raw: u32,
+    _str: [24]u8, // 21 - 255.255.255.255:65535
+    _str_len: usize,
+
+    pub fn init(string: []const u8) !Ip4 {
+        const address = try std.net.Ip4Address.parse(string, 0);
+        var ip_str = std.mem.zeroes([24]u8);
+        const ip_str_slice = try std.fmt.bufPrint(&ip_str, "{}", .{address});
+        const flipped = std.mem.bigToNative(u32, address.sa.addr);
+        const ip = Ip4 {
+            .add = address,
+            .raw = flipped,
+            ._str = ip_str,
+            ._str_len = ip_str_slice.len - 2,
+        };
+
+        return ip;
+    }
+
+    pub fn str(ip: Ip4) []const u8 {
+        return ip._str[0..ip._str_len];
+    }
+};
+
+pub const Ip6 = struct {
+    raw: u128,
+    add: std.net.Ip6Address,
+    _str: [64]u8, // 47 - [aaaa:bbbb:cccc:dddd:eeee:ffff:1234:5678]:65535
+    _str_len: usize,
+
+    pub fn init(string: []const u8) !Ip6 {
+        const address = try std.net.Ip6Address.resolve(string, 0);
+        const flipped = std.mem.bigToNative(
+            u128,
+            @as(*align(1) const u128, @ptrCast(&address.sa.addr)).*
+        );
+
+        var ip = Ip6 {
+            .add = address,
+            .raw = flipped,
+            ._str = std.mem.zeroes([64]u8),
+            ._str_len = 0,
+        };
+
+        const ip_str_slice = try std.fmt.bufPrint(ip._str[0..], "{}", .{address});
+        ip._str_len = ip_str_slice.len - 3;
+
+        return ip;
+    }
+
+    pub fn str(ip: Ip6) []const u8 {
+        return ip._str[1..ip._str_len]; // Remove the port and brackets
+    }
+};
+// zig fmt: on
+
 pub const Address = std.net.Address;
 pub const String = []const u8;
 pub const DomainList = std.BoundedArray(String, 16); // TODO: fix make this dynamic
@@ -131,6 +190,65 @@ pub const StringManaged = struct {
     }
 };
 
+// zig fmt: off
+// TODO: find a way to do this using to lower or something
+const truthAndFalseTable = std.ComptimeStringMap(bool, .{
+    .{ "True", true },
+    .{ "False", false },
+    .{ "true", true },
+    .{ "false", false },
+    .{ "1", true },
+    .{ "0", false }
+});
+// zig fmt: on
+
+pub fn convert(comptime T: type, val: []const u8) !T {
+    return switch (@typeInfo(T)) {
+        .Int, .ComptimeInt => try std.fmt.parseInt(T, val, 0),
+        .Float, .ComptimeFloat => try std.fmt.parseFloat(T, val),
+        .Bool => truthAndFalseTable.get(val).?,
+        else => {
+            const tn = @typeName(T);
+            std.debug.print(tn, .{});
+            if (std.mem.eql(u8, tn, "customAddress")) {
+                return "0.0.0.0";
+            } else {
+                return @as(T, val);
+            }
+        },
+    };
+}
+
+// zig fmt: off
+const Option = union(enum) {
+    address4: []const u8,
+    address6: []const u8,
+    domain: []const u8,
+
+    pub fn parse(allocator: Allocator, key: []const u8, value: []const u8) ?Option {
+        const O = std.meta.FieldEnum(Option);
+        const t = std.meta.stringToEnum(O, key) orelse return null;
+        return switch (t) {
+            .address4 => {
+                const address: std.net.Address = std.net.Address.resolveIp(value, 80) catch return null;
+                const ret = Option {
+                    .address4 = std.fmt.allocPrint(allocator, "{}", .{address}) catch return null
+                };
+                return ret;
+            },
+            .domain => .{ .domain = value },
+            else => null,
+        };
+    }
+
+    pub fn deinit(option: *Option, allocator: Allocator) void {
+        _ = allocator;
+        _ = option;
+        // allocator.free(field)
+    }
+};
+// zig fmt: on
+
 test "string creation" {
     const alloc = std.testing.allocator;
 
@@ -225,4 +343,21 @@ test "string append" {
 
     try std.testing.expectEqualStrings("Hello world!", str2.str());
     try std.testing.expectEqual(@as(usize, 24), str2.capacity());
+}
+
+test "converter" {
+    const test_float: f64 = 3.141;
+    try std.testing.expectEqual(test_float, try convert(@TypeOf(test_float), "3.141"));
+}
+
+test "parser" {
+    // const alloc = std.testing.allocator;
+
+    // var option = Option.parse(alloc, "address4", "192.168.1.1");
+    // if (option) |*o| {
+    //     defer o.deinit(alloc);
+    //     try std.testing.expectEqual(.{ .address4 = "192.168.1.1" }, o);
+    // } else {
+    //     @panic("Uh oh");
+    // }
 }
