@@ -1,3 +1,6 @@
 [submodule "lib/zig-curl"]
 	path = lib/zig-curl
 	url = https://github.com/mattn/zig-curl.git
+[submodule "lib/ini"]
+	path = lib/ini
+	url = https://github.com/ziglibs/ini

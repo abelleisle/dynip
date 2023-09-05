@@ -7,7 +7,7 @@ const Allocator = std.mem.Allocator;
 const b_duckdns = @import("backends/duckdns.zig");
 const b_namecheap = @import("backends/namecheap.zig");
 
-const Backends = union(enum) { duckdns, namecheap, none };
+const Backends = enum { duckdns, namecheap, none };
 
 const Options = struct {
     backend: Backends = .none,
@@ -16,6 +16,25 @@ const Options = struct {
     username: NetType.String = "",
     password: NetType.String = "",
     domain: NetType.String = "",
+
+    pub fn set(options: *Options, key: []const u8, value: []const u8) !void {
+        // inline for (std.meta.fields(@TypeOf(cb.configOptions))) |f| {
+        //     if (std.mem.eql(u8, f.name, key)) {
+        //         const my_type = @TypeOf(@field(cb, f.name));
+        //         @field(cb, f.name) = try cb.convert(my_type, value);
+        //     }
+        // }
+        const O = std.meta.FieldEnum(Options);
+        const t = std.meta.stringToEnum(O, key) orelse {
+            return; // TODO: report issue
+        };
+        switch (t) {
+            .backend => {
+                options.backend = std.meta.stringToEnum(Backends, value) orelse .none;
+            },
+            else => @panic("Please implement"),
+        }
+    }
 };
 
 /// Struct Methods
@@ -100,7 +119,7 @@ pub const ConfigBuilder = struct {
             .backend => {
                 cb.configOptions.backend = std.meta.stringToEnum(Backends, value) orelse .none;
             },
-            else => @panic("Please implement")
+            else => @panic("Please implement"),
         }
     }
 };

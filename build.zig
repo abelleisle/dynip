@@ -54,13 +54,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // const curl = b.dependency("curl", .{
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-    // const curlModule = curl.module("curl");
-    const curlModule = b.createModule(.{ .source_file = .{ .path = "./lib/zig-curl/src/main.zig" } });
-    exe.addModule("curl", curlModule);
+    const iniModule = b.createModule(.{ .source_file = .{ .path = "./lib/ini/src/ini.zig" } });
+    exe.addModule("ini", iniModule);
     linkToCurl(exe);
 
     for (sys_packages.items) |p| {
@@ -103,7 +98,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    unit_tests.addModule("curl", curlModule);
+    unit_tests.addModule("ini", iniModule);
     for (sys_packages.items) |p| {
         unit_tests.addIncludePath(.{ .path = p });
     }
