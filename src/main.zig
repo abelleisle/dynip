@@ -2,7 +2,6 @@ const std = @import("std");
 const service = @import("service.zig");
 const NetType = @import("types.zig");
 const Config = @import("config.zig");
-const Ini = @import("ini.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -93,7 +92,6 @@ test "test all" {
     @import("std").testing.refAllDecls(service);
     @import("std").testing.refAllDecls(NetType);
     @import("std").testing.refAllDecls(Config);
-    @import("std").testing.refAllDecls(Ini);
 }
 
 test "curl simple test" {

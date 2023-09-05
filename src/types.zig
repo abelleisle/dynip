@@ -197,8 +197,12 @@ const truthAndFalseTable = std.ComptimeStringMap(bool, .{
     .{ "False", false },
     .{ "true", true },
     .{ "false", false },
+    .{ "yes", true},
+    .{ "no", false},
+    .{ "Yes", true},
+    .{ "No", false},
     .{ "1", true },
-    .{ "0", false }
+    .{ "0", false },
 });
 // zig fmt: on
 
