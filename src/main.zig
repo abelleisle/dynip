@@ -6,6 +6,7 @@ const Config = @import("config.zig");
 const Allocator = std.mem.Allocator;
 
 const curl = @import("curl/curl.zig");
+const interface = @import("net/interface.zig");
 
 // The config will look something like this:
 //
@@ -52,12 +53,10 @@ const curl = @import("curl/curl.zig");
 // }
 
 pub fn main() void {
-    const test_ip = NetType.Address.resolveIp("172.16.50.100", 100) catch |err| {
-        std.log.err("Error while resolving IP: {}", .{err});
-        return;
-    };
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
 
-    std.debug.print("IP address to print: {}\n", .{test_ip});
+    const alloc = arena.allocator();
 
     curl_test() catch |err| {
         std.log.err("Error while testing curl: {}", .{err});
@@ -66,11 +65,20 @@ pub fn main() void {
 
     const dir = Config.getPath();
 
-    std.log.debug("Config Dir: {s}", .{dir});
+    std.log.info("Config Dir: {s}", .{dir});
 
     const O = std.meta.FieldEnum(Config.Global);
     inline for (std.meta.fieldNames(O)) |o| {
-        std.log.err("{s}", .{o});
+        std.log.debug("{s}", .{o});
+    }
+
+    for (std.meta.tags(interface.AddrType)) |at| {
+        const ip = interface.getIp(alloc, "br0", at) catch |err| {
+            std.log.err("Error while obtaining IP for br0: {}", .{err});
+            return;
+        };
+        std.log.info("br0 ip: {s}", .{ip});
+        alloc.free(ip);
     }
 }
 
