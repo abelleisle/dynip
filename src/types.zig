@@ -10,6 +10,10 @@ pub const Ip4 = struct {
 
     pub fn init(string: []const u8) !Ip4 {
         const address = try std.net.Ip4Address.parse(string, 0);
+        return Ip4.initAddress(address);
+    }
+
+    pub fn initAddress(address: std.net.Ip4Address) !Ip4 {
         const flipped = std.mem.bigToNative(u32, address.sa.addr);
 
         var ip = Ip4{
@@ -26,6 +30,18 @@ pub const Ip4 = struct {
         return ip;
     }
 
+    // TODO: find a way to modify the `raw` variable and have it update the
+    // string. Use a union or something..
+    pub fn initRaw(raw: u32) !Ip4 {
+        const address = std.net.Ip4Address{
+            .sa = std.os.sockaddr.in{
+                .port = std.mem.nativeToBig(u16, 0),
+                .addr = std.mem.nativeToBig(u32, raw),
+            },
+        };
+        return Ip4.initAddress(address);
+    }
+
     /// Return the string slice for the IP
     pub fn str(ip: *const Ip4) []const u8 {
         return ip._str[0..ip._str_len];
@@ -37,8 +53,8 @@ pub const Ip4 = struct {
 
         const b0: u8 = @truncate((raw >> 24) & 0xff);
         const b1: u8 = @truncate((raw >> 16) & 0x0ff);
-        // const b2 : u8 = (raw >> 8) & 0x0ff;
-        // const b3 : u8 = raw & 0x0ff;
+        // const b2: u8 = @truncate((raw >> 8) & 0x0ff);
+        // const b3: u8 = @truncate(raw & 0x0ff);
 
         // 10.x.y.z
         if (b0 == 10)
@@ -70,6 +86,10 @@ pub const Ip6 = struct {
 
     pub fn init(string: []const u8) !Ip6 {
         const address = try std.net.Ip6Address.resolve(string, 0);
+        return initAddress(address);
+    }
+
+    pub fn initAddress(address: std.net.Ip6Address) !Ip6 {
         const flipped = std.mem.bigToNative(
             u128,
             @as(*align(1) const u128, @ptrCast(&address.sa.addr)).*
@@ -87,6 +107,17 @@ pub const Ip6 = struct {
         ip._str[ip_str_slice.len] = 0; // Ensure string is null terminated
 
         return ip;
+    }
+
+    // TODO: find a way to modify the `raw` variable and have it update the
+    // string. Use a union or something..
+    pub fn initRaw(raw: u128) !Ip6 {
+        const flipped = std.mem.nativeToBig(u128, raw);
+        const addr: [16]u8 = @bitCast(flipped);
+        const address = std.net.Ip6Address.init(
+            addr, std.mem.nativeToBig(u16, 0), 0, 0
+        );
+        return Ip6.initAddress(address);
     }
 
     /// Return the string slice for the IP
@@ -110,6 +141,24 @@ pub const Ip6 = struct {
     }
 };
 // zig fmt: on
+
+test "raw IP creation" {
+    const ip4_raw: u32 = (172 << 24) | (18 << 16) | (57 << 8) | 99;
+    const ip4 = try Ip4.initRaw(ip4_raw);
+    try std.testing.expectEqualStrings("172.18.57.99", ip4.str());
+    // zig fmt: off
+    const ip6_raw: u128 = (0xfd32 << 112) |
+                          (0x98b2 << 96) |
+                          (0x67bc << 80) |
+                          (0x7198 << 64) |
+                          (0xabcd << 48) |
+                          (0x1234 << 32) |
+                          (0x5678 << 16) |
+                          (0x9abc);
+    // zig fmt: on
+    const ip6 = try Ip6.initRaw(ip6_raw);
+    try std.testing.expectEqualStrings("fd32:98b2:67bc:7198:abcd:1234:5678:9abc", ip6.str());
+}
 
 test "public IP addresses" {
     // zig fmt: off
