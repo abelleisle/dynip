@@ -10,20 +10,23 @@ pub const Ip4 = struct {
 
     pub fn init(string: []const u8) !Ip4 {
         const address = try std.net.Ip4Address.parse(string, 0);
-        var ip_str = std.mem.zeroes([24]u8);
-        const ip_str_slice = try std.fmt.bufPrint(&ip_str, "{}", .{address});
         const flipped = std.mem.bigToNative(u32, address.sa.addr);
-        const ip = Ip4 {
+
+        var ip = Ip4 {
             .add = address,
             .raw = flipped,
-            ._str = ip_str,
-            ._str_len = ip_str_slice.len - 2,
+            ._str = std.mem.zeroes([24]u8),
+            ._str_len = 0,
         };
+
+        const ip_str_slice = try std.fmt.bufPrint(&ip._str, "{}", .{address});
+        ip._str_len = ip_str_slice.len - 2;
+        ip._str[ip._str_len] = 0; // Ensure string is null terminated
 
         return ip;
     }
 
-    pub fn str(ip: Ip4) []const u8 {
+    pub fn str(ip: *const Ip4) []const u8 {
         return ip._str[0..ip._str_len];
     }
 };
@@ -48,13 +51,14 @@ pub const Ip6 = struct {
             ._str_len = 0,
         };
 
-        const ip_str_slice = try std.fmt.bufPrint(ip._str[0..], "{}", .{address});
+        const ip_str_slice = try std.fmt.bufPrint(&ip._str, "{}", .{address});
         ip._str_len = ip_str_slice.len - 3;
+        ip._str[ip._str_len] = 0; // Ensure string is null terminated
 
         return ip;
     }
 
-    pub fn str(ip: Ip6) []const u8 {
+    pub fn str(ip: *const Ip6) []const u8 {
         return ip._str[1..ip._str_len]; // Remove the port and brackets
     }
 };

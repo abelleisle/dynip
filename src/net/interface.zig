@@ -9,6 +9,9 @@ const c_addr = @cImport({
     @cInclude("netdb.h");
 });
 
+const Ip4 = @import("../types.zig").Ip4;
+const Ip6 = @import("../types.zig").Ip6;
+
 /// Interface Errors
 pub const IfError = error{ ADDR_AGAIN, ADDR_BADFLAGS, ADDR_FAIL, ADDR_FAMILY, ADDR_MEMORY, ADDR_NONAME, ADDR_OVERFLOW, ADDR_UNKNOWN, UNKNOWN };
 
@@ -37,7 +40,11 @@ fn getAddrErrno(err: c_int) IfError {
 /// Gets the IP address of a system interface
 ///  Returns an allocated string containing the IP address of the chosen
 ///  interface. Up to the caller to free.
-pub fn getIp(allocator: mem.Allocator, interface: []const u8, addressType: AddrType) ![]const u8 {
+pub fn getIp(interface: []const u8, comptime addressType: type) !addressType {
+    comptime if (addressType != Ip4 and addressType != Ip6) {
+        @compileError("Only Ip4 and Ip6 types are supported");
+    };
+
     // C pointers for the interface addresses
     var ifaddr: [*c]c_addr.struct_ifaddrs = undefined; // Linked list
     var ifa: [*c]c_addr.struct_ifaddrs = undefined; // LL Active Node
@@ -65,7 +72,7 @@ pub fn getIp(allocator: mem.Allocator, interface: []const u8, addressType: AddrT
         // Only check for the same interface
         if (std.mem.eql(u8, ifa.*.ifa_name[0..interface.len], interface)) {
             // IPv4
-            if (addressType == AddrType.INET4 and ifa.*.ifa_addr.*.sa_family == c_addr.AF_INET) {
+            if (addressType == Ip4 and ifa.*.ifa_addr.*.sa_family == c_addr.AF_INET) {
                 @memset(address[0..], 0);
                 // Fill the `address` array
                 const s = c_addr.getnameinfo(ifa.*.ifa_addr, @sizeOf(c_addr.sockaddr_in), address[0..].ptr, c_addr.NI_MAXHOST, null, 0, c_addr.NI_NUMERICHOST);
@@ -74,7 +81,7 @@ pub fn getIp(allocator: mem.Allocator, interface: []const u8, addressType: AddrT
                 }
             }
             // IPv6
-            else if (addressType == AddrType.INET6 and ifa.*.ifa_addr.*.sa_family == c_addr.AF_INET6) {
+            else if (addressType == Ip6 and ifa.*.ifa_addr.*.sa_family == c_addr.AF_INET6) {
                 @memset(address[0..], 0);
                 // Fill the `address` array
                 const s = c_addr.getnameinfo(ifa.*.ifa_addr, @sizeOf(c_addr.sockaddr_in6), address[0..].ptr, c_addr.INET6_ADDRSTRLEN, null, 0, c_addr.NI_NUMERICHOST);
@@ -85,10 +92,8 @@ pub fn getIp(allocator: mem.Allocator, interface: []const u8, addressType: AddrT
                 continue;
             }
 
-            // Allocate the IP string for returning and copy the address to it
-            var interface_ip = try allocator.alloc(u8, address.len);
-            std.mem.copy(u8, interface_ip, address[0..]);
-            return interface_ip;
+            const addr_len = std.mem.indexOf(u8, &address, &[1]u8{0}) orelse address.len;
+            return addressType.init(address[0..addr_len]);
         }
     }
 

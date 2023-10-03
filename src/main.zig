@@ -57,6 +57,7 @@ pub fn main() void {
     defer arena.deinit();
 
     const alloc = arena.allocator();
+    _ = alloc;
 
     curl_test() catch |err| {
         std.log.err("Error while testing curl: {}", .{err});
@@ -72,13 +73,12 @@ pub fn main() void {
         std.log.debug("{s}", .{o});
     }
 
-    for (std.meta.tags(interface.AddrType)) |at| {
-        const ip = interface.getIp(alloc, "br0", at) catch |err| {
-            std.log.err("Error while obtaining IP for br0: {}", .{err});
+    inline for (.{ NetType.Ip4, NetType.Ip6 }) |at| {
+        const ip = interface.getIp("en0", at) catch |err| {
+            std.log.err("Error while obtaining IP for en0: {}", .{err});
             return;
         };
-        std.log.info("br0 ip: {s}", .{ip});
-        alloc.free(ip);
+        std.log.info("en0 ip: {s}", .{ip.str()});
     }
 }
 
