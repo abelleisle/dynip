@@ -76,6 +76,8 @@ pub const Ip4 = struct {
 
         return true;
     }
+
+    pub fn deinit() void {}
 };
 
 pub const Ip6 = struct {
@@ -139,6 +141,8 @@ pub const Ip6 = struct {
 
         return true;
     }
+
+    pub fn deinit() void {}
 };
 // zig fmt: on
 
@@ -146,6 +150,7 @@ test "raw IP creation" {
     const ip4_raw: u32 = (172 << 24) | (18 << 16) | (57 << 8) | 99;
     const ip4 = try Ip4.initRaw(ip4_raw);
     try std.testing.expectEqualStrings("172.18.57.99", ip4.str());
+    try std.testing.expectEqual(ip4_raw, ip4.raw);
     // zig fmt: off
     const ip6_raw: u128 = (0xfd32 << 112) |
                           (0x98b2 << 96) |
@@ -158,6 +163,7 @@ test "raw IP creation" {
     // zig fmt: on
     const ip6 = try Ip6.initRaw(ip6_raw);
     try std.testing.expectEqualStrings("fd32:98b2:67bc:7198:abcd:1234:5678:9abc", ip6.str());
+    try std.testing.expectEqual(ip6_raw, ip6.raw);
 }
 
 test "public IP addresses" {

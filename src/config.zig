@@ -11,35 +11,66 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Service = @import("service.zig");
 
-// const ini = @import("ini.zig");
 const ini = @import("ini");
 
 const appName = "dynip";
 const configEnd = appName ++ [_]u8{fs.path.sep} ++ appName ++ ".ini";
 
+const StringManaged = NetType.StringManaged;
+
 // zig fmt: off
 
 /// Global config
 pub const Global = struct {
-    cache: bool = true, // Should the fetched IPs be cached
-    period: isize = 60, // How often should DNS entries be refreshed (minutes)
+    cache: bool, // Should the fetched IPs be cached
+    period: isize, // How often should DNS entries be refreshed (minutes)
 
     ip4: union(enum) {
         static: Ip4,
-        detect: []const u8,
-        interface: ?[]const u8,
-    } = .{ .detect = "ifconfig.co" },
+        detect: *StringManaged,
+        interface: *StringManaged,
+    },
 
     ip6: union(enum) {
         static: Ip6,
-        detect: []const u8,
-        interface: ?[]const u8,
-    } = .{ .interface = null },
+        detect: *StringManaged,
+        interface: *StringManaged,
+    },
 
     ip6_prefix: union(enum) {
         disabled: void,
         enabled: u64
-    } = .{ .enabled = 56 },
+    },
+
+    // Which allocator to use for allocating string memory?
+    allocator: std.mem.Allocator,
+    // These are used to avoid leaking memory
+    _ip4Storage: StringManaged,
+    _ip6Storage: StringManaged,
+
+    pub fn init(allocator: std.mem.Allocator) !Global {
+        var g: Global = .{
+            .allocator = allocator,
+            ._ip4Storage = try StringManaged.initData(allocator, "ifconfig.co"),
+            ._ip6Storage = try StringManaged.initData(allocator, "br0"),
+
+            .cache = true,
+            .period = 60,
+            .ip4 = .{ .detect = undefined },
+            .ip6 = .{ .interface = undefined },
+            .ip6_prefix = .{ .enabled = 64 }
+        };
+
+        g.ip4 = .{ .detect = &g._ip4Storage };
+        g.ip6 = .{ .interface = &g._ip6Storage };
+
+        return g;
+    }
+
+    pub fn deinit(go: *Global) void {
+        go._ip4Storage.deinit();
+        go._ip6Storage.deinit();
+    }
 
     pub fn set(go: *Global, key: []const u8, value: []const u8) !void {
         var split_key = std.mem.split(u8, key, ".");
@@ -68,10 +99,11 @@ pub const Global = struct {
                 if (split_key.next()) |f| {
                     const ip4_enum = std.meta.FieldEnum(@TypeOf(go.ip4));
                     const ip4_enum_field = std.meta.stringToEnum(ip4_enum, f) orelse return error.NoOption;
+                    try go._ip4Storage.set(value);
                     go.ip4 = switch (ip4_enum_field) {
                         .static => .{ .static = try Ip4.init(value) },
-                        .detect => .{ .detect = value },
-                        .interface => .{ .interface = value }
+                        .detect => .{ .detect = &go._ip4Storage },
+                        .interface => .{ .interface = &go._ip4Storage },
                     };
                 }
             },
@@ -80,14 +112,26 @@ pub const Global = struct {
                 if (split_key.next()) |f| {
                     const ip6_enum = std.meta.FieldEnum(@TypeOf(go.ip6));
                     const ip6_enum_field = std.meta.stringToEnum(ip6_enum, f) orelse return error.NoOption;
+                    try go._ip6Storage.set(value);
                     go.ip6 = switch (ip6_enum_field) {
                         .static => .{ .static = try Ip6.init(value) },
-                        .detect => .{ .detect = value },
-                        .interface => .{ .interface = value }
+                        .detect => .{ .detect = &go._ip6Storage },
+                        .interface => .{ .interface = &go._ip6Storage },
                     };
                 }
             },
-            else => @panic("Unimplemented")
+            // IPv6 Prefix
+            .ip6_prefix => {
+                if (split_key.next()) |f| {
+                    const ip6_enum = std.meta.FieldEnum(@TypeOf(go.ip6_prefix));
+                    const ip6_enum_field = std.meta.stringToEnum(ip6_enum, f) orelse return error.NoOption;
+                    go.ip6_prefix = switch (ip6_enum_field) {
+                        .disabled => .disabled,
+                        .enabled => .{ .enabled = try std.fmt.parseInt(@TypeOf(go.ip6_prefix.enabled), value, 0) }
+                    };
+                }
+            },
+            else => {}
         }
     }
 };
@@ -95,7 +139,10 @@ pub const Global = struct {
 // zig fmt: on
 
 test "set global config" {
-    var go: Global = .{};
+    const alloc = std.testing.allocator;
+
+    var go = try Global.init(alloc);
+    defer go.deinit();
 
     try go.set("cache", "False");
     try std.testing.expectEqual(false, go.cache);
@@ -111,9 +158,28 @@ test "set global config" {
     try std.testing.expect(3109565698 == go.ip4.static.raw);
     try std.testing.expectEqualStrings("185.88.53.2", go.ip4.static.str());
 
+    try go.set("ip4.detect", "ifconfig.co");
+    try std.testing.expectEqualStrings("ifconfig.co", go.ip4.detect.str());
+
+    try go.set("ip4.interface", "br0");
+    try std.testing.expectEqualStrings("br0", go.ip4.interface.str());
+
     try std.testing.expectError(error.InvalidCharacter, go.set("ip6.static", "hello"));
     try go.set("ip6.static", "2001:db8:23ab:53::1");
     try std.testing.expectEqualStrings("2001:db8:23ab:53::1", go.ip6.static.str());
+
+    try go.set("ip6.detect", "ifconfig.co");
+    try std.testing.expectEqualStrings("ifconfig.co", go.ip6.detect.str());
+
+    try go.set("ip6.interface", "br1");
+    try std.testing.expectEqualStrings("br1", go.ip6.interface.str());
+
+    try go.set("ip6_prefix.disabled", "");
+    try std.testing.expect(go.ip6_prefix == .disabled);
+
+    try std.testing.expectError(error.InvalidCharacter, go.set("ip6_prefix.enabled", "z,"));
+    try go.set("ip6_prefix.enabled", "64");
+    try std.testing.expect(64 == go.ip6_prefix.enabled);
 }
 
 /// Get the path of the config
@@ -133,24 +199,28 @@ pub const Storage = struct {
 
     allocator: Allocator,
 
-    pub fn init(allocator: Allocator) Storage {
+    pub fn init(allocator: Allocator) !Storage {
         return .{
-            .global = .{},
+            .global = try Global.init(allocator),
             .services = ArrayList(Service).init(allocator),
             .allocator = allocator
         };
     }
 
     pub fn deinit(storage: *Storage) void {
+        for (storage.services.items) |*s| {
+            s.deinit();
+        }
         storage.services.deinit();
+        storage.global.deinit();
     }
 };
 // zig fmt: on
 
 /// Reads the contents of the config file
 /// The caller is responsible for freeing the allocated services item
-pub fn read(allocator: Allocator) !Storage {
-    const file = try std.fs.openFileAbsolute(getPath(), .{});
+pub fn read(allocator: Allocator, filepath: []const u8) !Storage {
+    const file = try std.fs.openFileAbsolute(filepath, .{});
     defer file.close();
 
     var parser = ini.parse(allocator, file.reader());
@@ -159,7 +229,7 @@ pub fn read(allocator: Allocator) !Storage {
     var writer = std.io.getStdErr().writer();
     _ = writer;
 
-    var storage = Storage.init(allocator);
+    var storage = try Storage.init(allocator);
 
     var processing_global = true;
     var service: ?Service = null;
@@ -192,7 +262,30 @@ pub fn read(allocator: Allocator) !Storage {
         }
     }
 
+    // Write the current service to the config storage
+    if (service) |s| {
+        try storage.services.append(s);
+        service = null;
+    }
+
     return storage;
+}
+
+test "read config" {
+    const alloc = std.testing.allocator;
+
+    const filepath = try std.fs.cwd().realpathAlloc(alloc, "src/tests/example.ini");
+    defer alloc.free(filepath);
+
+    var configuration = try read(alloc, filepath);
+    defer configuration.deinit();
+
+    try std.testing.expect(configuration.global.cache == false);
+    try std.testing.expect(configuration.global.period == 5600);
+    try std.testing.expectEqualStrings("ifconfig.co", configuration.global.ip4.detect.str());
+
+    const service = configuration.services.items[0];
+    try std.testing.expectEqualStrings("nginx", service.name.str());
 }
 
 test "build config" {

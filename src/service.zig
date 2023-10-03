@@ -41,27 +41,22 @@ const Options = struct {
 allocator: Allocator,
 
 // Passed in
-name: []const u8,
+name: NetType.StringManaged,
 options: Options,
-
-// Generated
-url: []const u8,
 
 pub fn init(allocator: Allocator, name: []const u8, options: Options) !Service {
     // zig fmt: off
     var self: Service = .{
         .allocator = allocator,
-        .name      = name,
+        .name      = try NetType.StringManaged.initData(allocator, name),
         .options   = options,
-        .url       = ""
     };
     // zig fmt: on
-    self.url = try self.get_url();
     return self;
 }
 
 pub fn deinit(self: *Service) void {
-    self.allocator.free(self.url);
+    self.name.deinit();
 }
 
 fn get_url(self: *Service) ![]const u8 {
@@ -82,7 +77,8 @@ fn get_url(self: *Service) ![]const u8 {
             o.address4,
             o.address6
         ),
-        else => @panic("Uh oh")
+        .none => "",
+        // else => @panic("Uh oh")
     };
     // zig fmt: on
 }
@@ -143,7 +139,8 @@ test "DuckDNS url" {
     var dns = try Service.init(alloc, "tester", options);
     defer dns.deinit();
 
-    const url = dns.url;
+    const url = try dns.get_url();
+    defer alloc.free(url);
 
     const expected = "https://duckdns.org/update?domains=example&token=1234&ipv6=::1:2:3:4";
     try std.testing.expectEqualStrings(expected, url);
