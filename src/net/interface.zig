@@ -9,32 +9,43 @@ const c_addr = @cImport({
     @cInclude("netdb.h");
 });
 
+// zig fmt: off
 const Ip4 = @import("../types.zig").Ip4;
 const Ip6 = @import("../types.zig").Ip6;
 
 /// Interface Errors
-pub const IfError = error{ ADDR_AGAIN, ADDR_BADFLAGS, ADDR_FAIL, ADDR_FAMILY, ADDR_MEMORY, ADDR_NONAME, ADDR_OVERFLOW, ADDR_UNKNOWN, UNKNOWN };
-
-/// Address type
-///  IPv4 and IPv6
-pub const AddrType = enum {
-    INET4, // IPv4
-    INET6, // IPv6
+pub const IfError = error {
+    AddressAGAIN,
+    AddressBADFLAGS,
+    AddressFAIL,
+    AddressFAMILY,
+    AddressMEMORY,
+    AddressNONAME,
+    AddressOVERFLOW,
+    AddressSYSTEM,
+    IfGetifaddrsFailure,
+    IfNoInterfaceFound,
+    IfNoValidAddressFound,
+    Unknown
 };
+
+// zig fmt: on
 
 /// All convert "ifaddrs.h" error codes to zig errors
 fn getAddrErrno(err: c_int) IfError {
+    // zig fmt: off
     return switch (err) {
-        c_addr.EAI_AGAIN => IfError.ADDR_AGAIN,
-        c_addr.EAI_BADFLAGS => IfError.ADDR_BADFLAGS,
-        c_addr.EAI_FAIL => IfError.ADDR_FAIL,
-        c_addr.EAI_FAMILY => IfError.ADDR_FAMILY,
-        c_addr.EAI_MEMORY => IfError.ADDR_MEMORY,
-        c_addr.EAI_NONAME => IfError.ADDR_NONAME,
-        c_addr.EAI_OVERFLOW => IfError.ADDR_OVERFLOW,
-        c_addr.EAI_SYSTEM => IfError.ADDR_UNKNOWN,
-        else => IfError.UNKNOWN,
+        c_addr.EAI_AGAIN    => IfError.AddressAGAIN,
+        c_addr.EAI_BADFLAGS => IfError.AddressBADFLAGS,
+        c_addr.EAI_FAIL     => IfError.AddressFAIL,
+        c_addr.EAI_FAMILY   => IfError.AddressFAMILY,
+        c_addr.EAI_MEMORY   => IfError.AddressMEMORY,
+        c_addr.EAI_NONAME   => IfError.AddressNONAME,
+        c_addr.EAI_OVERFLOW => IfError.AddressOVERFLOW,
+        c_addr.EAI_SYSTEM   => @panic("errno error, please handle this!"),
+        else                => @panic("Unknown error, please handle this!"),
     };
+    // zig fmt: on
 }
 
 /// Gets the IP address of a system interface
@@ -56,7 +67,7 @@ pub fn getIp(interface: []const u8, comptime addressType: type, filter_local: bo
 
     // Get the list of interfaces and their IPs
     if (c_addr.getifaddrs(&ifaddr) == -1) {
-        return error.getifaddrsFailure;
+        return IfError.IfGetifaddrsFailure;
     }
     defer c_addr.freeifaddrs(ifaddr);
 
@@ -106,8 +117,8 @@ pub fn getIp(interface: []const u8, comptime addressType: type, filter_local: bo
     }
 
     if (!interface_exists) {
-        return error.NoInterfaceFound;
+        return IfError.IfNoInterfaceFound;
     }
 
-    return error.NoValidAddressFound;
+    return IfError.IfNoValidAddressFound;
 }
