@@ -2,7 +2,7 @@
 
 This is a stub mirror. The full source code for this commit is at:
 
-https://git.bitcicle.com/andy/dynip/src/commit/0b3b164e453f050180e9418aeefbe6f26ba51bfb
+https://git.bitcicle.com/andy/dynip/src/commit/a43b30dad4d4f2412d12a93267b0fc43e04b6585
 
 To browse or clone the full repository, visit:
 
