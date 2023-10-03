@@ -40,7 +40,7 @@ pub const Global = struct {
         disabled: void,
         enabled: u64
     } = .{ .enabled = 56 },
-    
+
     pub fn set(go: *Global, key: []const u8, value: []const u8) !void {
         var split_key = std.mem.split(u8, key, ".");
         const enum_key = split_key.first();
@@ -121,6 +121,7 @@ pub fn getPath() []const u8 {
     return switch (builtin.os.tag) {
         .linux => "/etc/" ++ configEnd,
         .windows => "C:\\Program Files\\" ++ configEnd,
+        .macos => "/etc/" ++ configEnd,
         else => @panic("OS Unsupported"),
     };
 }
@@ -285,6 +286,7 @@ test "config path" {
     switch (builtin.os.tag) {
         .linux => try std.testing.expectEqualStrings("/etc/dynip/dynip.ini", path),
         .windows => try std.testing.expectEqualStrings("C:\\Program Files\\dynip\\dynip.ini", path),
+        .macos => try std.testing.expectEqualStrings("/etc/dynip/dynip.ini", path),
         else => @panic("OS Unsupported"),
     }
 }
