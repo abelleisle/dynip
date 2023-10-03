@@ -40,10 +40,12 @@ fn getAddrErrno(err: c_int) IfError {
 /// Gets the IP address of a system interface
 ///  Returns an allocated string containing the IP address of the chosen
 ///  interface. Up to the caller to free.
-pub fn getIp(interface: []const u8, comptime addressType: type) !addressType {
+pub fn getIp(interface: []const u8, comptime addressType: type, filter_local: bool) !addressType {
     comptime if (addressType != Ip4 and addressType != Ip6) {
         @compileError("Only Ip4 and Ip6 types are supported");
     };
+
+    var interface_exists = false;
 
     // C pointers for the interface addresses
     var ifaddr: [*c]c_addr.struct_ifaddrs = undefined; // Linked list
@@ -71,6 +73,8 @@ pub fn getIp(interface: []const u8, comptime addressType: type) !addressType {
 
         // Only check for the same interface
         if (std.mem.eql(u8, ifa.*.ifa_name[0..interface.len], interface)) {
+            interface_exists = true; // This is used for error tracking
+
             // IPv4
             if (addressType == Ip4 and ifa.*.ifa_addr.*.sa_family == c_addr.AF_INET) {
                 @memset(address[0..], 0);
@@ -93,9 +97,17 @@ pub fn getIp(interface: []const u8, comptime addressType: type) !addressType {
             }
 
             const addr_len = std.mem.indexOf(u8, &address, &[1]u8{0}) orelse address.len;
-            return addressType.init(address[0..addr_len]);
+            const interface_address = try addressType.init(address[0..addr_len]);
+
+            if (filter_local and !interface_address.isPublic()) continue;
+
+            return interface_address;
         }
     }
 
-    return error.NoInterfaceFound;
+    if (!interface_exists) {
+        return error.NoInterfaceFound;
+    }
+
+    return error.NoValidAddressFound;
 }

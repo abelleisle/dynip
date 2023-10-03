@@ -73,12 +73,13 @@ pub fn main() void {
         std.log.debug("{s}", .{o});
     }
 
+    const itfc = "br0";
     inline for (.{ NetType.Ip4, NetType.Ip6 }) |at| {
-        const ip = interface.getIp("en0", at) catch |err| {
-            std.log.err("Error while obtaining IP for en0: {}", .{err});
-            return;
-        };
-        std.log.info("en0 ip: {s}", .{ip.str()});
+        if (interface.getIp(itfc, at, true)) |ip| {
+            std.log.info("{s} ip: {s}", .{ itfc, ip.str() });
+        } else |err| {
+            std.log.err("Error while obtaining IP for {s}: {}", .{ itfc, err });
+        }
     }
 }
 

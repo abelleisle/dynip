@@ -12,7 +12,7 @@ pub const Ip4 = struct {
         const address = try std.net.Ip4Address.parse(string, 0);
         const flipped = std.mem.bigToNative(u32, address.sa.addr);
 
-        var ip = Ip4 {
+        var ip = Ip4{
             .add = address,
             .raw = flipped,
             ._str = std.mem.zeroes([24]u8),
@@ -21,13 +21,44 @@ pub const Ip4 = struct {
 
         const ip_str_slice = try std.fmt.bufPrint(&ip._str, "{}", .{address});
         ip._str_len = ip_str_slice.len - 2;
-        ip._str[ip._str_len] = 0; // Ensure string is null terminated
+        ip._str[ip_str_slice.len] = 0; // Ensure string is null terminated
 
         return ip;
     }
 
+    /// Return the string slice for the IP
     pub fn str(ip: *const Ip4) []const u8 {
         return ip._str[0..ip._str_len];
+    }
+
+    /// Is this a public IP address?
+    pub fn isPublic(ip: *const Ip4) bool {
+        const raw = ip.raw;
+
+        const b0: u8 = @truncate((raw >> 24) & 0xff);
+        const b1: u8 = @truncate((raw >> 16) & 0x0ff);
+        // const b2 : u8 = (raw >> 8) & 0x0ff;
+        // const b3 : u8 = raw & 0x0ff;
+
+        // 10.x.y.z
+        if (b0 == 10)
+            return false;
+
+        // 172.16.0.0 - 172.31.255.255
+        if ((b0 == 172) and (b1 >= 16) and (b1 <= 31))
+            return false;
+
+        // 192.168.0.0 - 192.168.255.255
+        if ((b0 == 192) and (b1 == 168))
+            return false;
+
+        // 127.x.y.z
+        if (b0 == 127)
+            return false;
+
+        // TODO: Add WAY more
+
+        return true;
     }
 };
 
@@ -44,7 +75,7 @@ pub const Ip6 = struct {
             @as(*align(1) const u128, @ptrCast(&address.sa.addr)).*
         );
 
-        var ip = Ip6 {
+        var ip = Ip6{
             .add = address,
             .raw = flipped,
             ._str = std.mem.zeroes([64]u8),
@@ -53,16 +84,73 @@ pub const Ip6 = struct {
 
         const ip_str_slice = try std.fmt.bufPrint(&ip._str, "{}", .{address});
         ip._str_len = ip_str_slice.len - 3;
-        ip._str[ip._str_len] = 0; // Ensure string is null terminated
+        ip._str[ip_str_slice.len] = 0; // Ensure string is null terminated
 
         return ip;
     }
 
+    /// Return the string slice for the IP
     pub fn str(ip: *const Ip6) []const u8 {
         return ip._str[1..ip._str_len]; // Remove the port and brackets
     }
+
+    /// Is this a public IP address?
+    pub fn isPublic(ip: *const Ip6) bool {
+        // fe80::/10
+        if ((ip.raw >> 118) == 0x3fa) // 0xfe80 >> 6 == 0x3fa
+            return false;
+
+        // fc00::/7
+        if ((ip.raw >> 121) == 0x7e) // 0xfc00 >> 9 == 0x7e
+            return false;
+
+        // TODO: Make sure this is enough
+
+        return true;
+    }
 };
 // zig fmt: on
+
+test "public IP addresses" {
+    // zig fmt: off
+    // IPv4
+    const ip4s = .{
+        .{"192.168.88.27", false},
+        .{"127.1.0.5",     false},
+        .{"11.53.68.12",   true },
+        .{"10.5.35.1",     false},
+        .{"172.17.14.53",  false},
+    };
+
+    // IPv6
+    const ip6s = .{
+        .{"fc00::",                                false},
+        .{"fd17::234:f",                           false},
+        .{"2601:813f:46::ab",                      true },
+        .{"fe93:34::1",                            false},
+        .{"fe80::a:b:c:d",                         false},
+        .{"fdd3:9835:ed41::",                      false},
+        .{"2101:db8:53fb:cdab:128f:237b:14e:efda", true }
+    };
+    // zig fmt: on
+
+    inline for (.{
+        .{ Ip4, ip4s },
+        .{ Ip6, ip6s },
+    }) |test_entry| {
+        const T = test_entry[0];
+        inline for (test_entry[1]) |ip| {
+            const ip_string = ip[0];
+            const test_ip = try T.init(ip_string);
+            const expected = ip[1];
+            const actual = test_ip.isPublic();
+            std.testing.expectEqual(expected, actual) catch |err| {
+                std.log.err("{s} {s} public!", .{ ip_string, if (actual) "is" else "is not" });
+                return err;
+            };
+        }
+    }
+}
 
 pub const Address = std.net.Address;
 pub const String = []const u8;
