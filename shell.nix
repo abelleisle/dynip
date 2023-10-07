@@ -1,18 +1,9 @@
-{ pkgs ? import <nixpkgs> {} }:
-pkgs.mkShell {
-  name = "dynip";
-
-  # buildInputs is used for building the package, not for dev
-  buildInputs = with pkgs; [
-    curl.dev
-    glibc
-    zig
-  ];
-
-  # nativeBuildInputs is usually what you want -- tools you need to run
-  nativeBuildInputs = with pkgs; [
-    # This needs to get fixed by fetching deps manually
-    # (pkgs.callPackage ./nix/pkgs/zls.nix { zig = zig."0.11.0"; })
-    zls
-  ];
-}
+(import (
+  let
+    lock = builtins.fromJSON (builtins.readFile ./flake.lock);
+  in fetchTarball {
+    url = "https://github.com/edolstra/flake-compat/archive/${lock.nodes.flake-compat.locked.rev}.tar.gz";
+    sha256 = lock.nodes.flake-compat.locked.narHash; }
+) {
+  src =  ./.;
+}).shellNix
