@@ -1,9 +1,15 @@
 # dynip
 
-This is a stub mirror. The full source code for this commit is at:
+This is a stub mirror. The source code lives on Forgejo.
 
-https://git.bitcicle.com/andy/dynip/src/commit/640c2a604cd459afc340c20994ea19547960b756
+**Repository:** https://git.bitcicle.com/andy/dynip
 
-To browse or clone the full repository, visit:
+## Branches
 
-https://git.bitcicle.com/andy/dynip
+| Branch | Commit | Link |
+|--------|--------|------|
+| `master` | `640c2a604cd4` | [view](https://git.bitcicle.com/andy/dynip/src/commit/640c2a604cd459afc340c20994ea19547960b756) |
+
+---
+
+*Last updated: 2026-03-01 18:42:49 UTC*
